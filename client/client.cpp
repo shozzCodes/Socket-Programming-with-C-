@@ -1,11 +1,3 @@
-// ============================================================================
-// Stage 7: Client - adds screenshot capture on server request
-// ----------------------------------------------------------------------------
-// Builds on Stage 6. When a SCREENSHOT_REQUEST arrives, the client prints a
-// clearly visible notice (never captures silently), grabs the desktop via
-// GDI, and sends it back framed as SCREENSHOT_DATA.
-// ============================================================================
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iostream>
@@ -17,14 +9,13 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-#define SERVER_IP "192.168.0.111"  // TODO: replace with YOUR server laptop's IP
+#define SERVER_IP "192.168.0.111"  // replace with server laptop's IP
 #define PORT 5000
 
 std::atomic<bool> connectionActive(true);
 
 void handleScreenshotRequest(SOCKET sock) {
-    // Visible indication - required by the assignment's safety rules.
-    // Never capture without the user being able to see this happened.
+ 
     std::cout << "\n[CLIENT] *** Server requested a screenshot - capturing desktop now ***"
               << std::endl;
 
@@ -32,7 +23,6 @@ void handleScreenshotRequest(SOCKET sock) {
     if (!captureDesktopAsBMP(bmpBytes)) {
         std::cout << "[CLIENT] Screenshot capture FAILED." << std::endl;
         // Tell the server it failed rather than silently doing nothing -
-        // the assignment requires the server to be able to report success/failure.
         sendMessage(sock, MsgType::SCREENSHOT_DATA, nullptr, 0);
         return;
     }
