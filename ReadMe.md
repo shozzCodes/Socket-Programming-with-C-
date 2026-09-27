@@ -1,143 +1,359 @@
 # TCP Socket Programming — Full-Duplex Communication & Screenshot Transfer
 
-A Windows-based **TCP socket programming project in C++** demonstrating client-server communication over a local network.
+A Windows-based **TCP socket programming project in C++** demonstrating real-time client-server communication between two physical computers over a Local Area Network (LAN).
 
-The project implements:
+The final implementation supports:
 
 * TCP client-server communication
 * Full-duplex messaging
-* Multithreaded send/receive operations
+* Multithreaded communication
 * Communication between two physical laptops
-* LAN communication over Wi-Fi or Ethernet
+* Wi-Fi LAN communication
+* Ethernet LAN communication
 * Binary data transfer
 * Screenshot capture and transfer
+* Custom application-level communication protocol
+* Shared protocol definitions
 * Windows Winsock API
-* A shared protocol definition between client and server
+* Windows Firewall configuration
+* Graceful connection shutdown
 
 ---
 
-## 📌 Project Overview
+# 📌 Project Overview
 
-This project demonstrates how two computers can communicate directly using **TCP sockets**.
+This project demonstrates how two computers can communicate using **TCP sockets**.
 
-One computer acts as the **server**, while another acts as the **client**.
+One computer runs the **server**, while another runs the **client**.
 
 ```text
-┌─────────────────────────┐
-│       SERVER LAPTOP     │
-│                         │
-│  C++ TCP Server         │
-│  Port: 5000             │
-│                         │
-│  192.168.x.x             │
-└────────────┬────────────┘
-             │
-             │ TCP
-             │
-             ▼
-┌─────────────────────────┐
-│       CLIENT LAPTOP     │
-│                         │
-│  C++ TCP Client         │
-│                         │
-│  192.168.x.x             │
-└─────────────────────────┘
+                    LOCAL AREA NETWORK
+                         TCP : 5000
+
+        ┌──────────────────────────────┐
+        │         SERVER LAPTOP        │
+        │                              │
+        │  server.cpp                  │
+        │  server7.exe                 │
+        │  Port: 5000                  │
+        │                              │
+        │  • Send messages             │
+        │  • Receive messages           │
+        │  • Receive screenshots       │
+        └──────────────┬───────────────┘
+                       │
+                       │ TCP
+                       │
+        ┌──────────────▼───────────────┐
+        │         CLIENT LAPTOP        │
+        │                              │
+        │  client.cpp                  │
+        │  client7.exe                 │
+        │                              │
+        │  • Send messages             │
+        │  • Receive messages           │
+        │  • Capture screenshot        │
+        │  • Transfer screenshot       │
+        └──────────────────────────────┘
 ```
 
-The connection can operate over:
+The two computers can communicate through:
 
 * Wi-Fi
-* Ethernet through a router/switch
+* Ethernet through a router
+* Ethernet through a network switch
 * Direct Ethernet connection between two laptops
 
-The application supports **full-duplex communication**, meaning both computers can send and receive messages simultaneously.
-
-The final stage also supports transferring a screenshot from the client to the server.
+The final project supports **full-duplex communication**, meaning both sides can send and receive data independently at the same time.
 
 ---
 
-# 📂 Project Structure
+# ✨ Final Features
 
-The project is organized as follows:
+## 1. TCP Client-Server Communication
+
+The project uses TCP sockets through the Windows Winsock API.
+
+The server follows the standard TCP server sequence:
+
+```text
+WSAStartup()
+     ↓
+socket()
+     ↓
+bind()
+     ↓
+listen()
+     ↓
+accept()
+     ↓
+send()/recv()
+```
+
+The client follows:
+
+```text
+WSAStartup()
+     ↓
+socket()
+     ↓
+connect()
+     ↓
+send()/recv()
+```
+
+Once the connection is established, both sides communicate through the same TCP connection.
+
+---
+
+# 2. Full-Duplex Messaging
+
+Both computers can send and receive messages independently.
+
+```text
+       SERVER                         CLIENT
+          │                              │
+          │────── "Hello" ──────────────►│
+          │                              │
+          │◄────── "Hi!" ────────────────│
+          │                              │
+          │────── "How are you?" ───────►│
+          │◄────── "Good!" ──────────────│
+          │                              │
+```
+
+The communication is not restricted to:
+
+```text
+send → receive → send → receive
+```
+
+Both sides can communicate concurrently.
+
+---
+
+# 3. Multithreaded Communication
+
+The project uses C++:
+
+```cpp
+std::thread
+```
+
+to separate receiving from the main sending loop.
+
+Conceptually:
+
+```text
+                  TCP SOCKET
+                      │
+            ┌─────────┴─────────┐
+            │                   │
+            ▼                   ▼
+      Main Thread         Receiver Thread
+            │                   │
+         send()              recv()
+            │                   │
+            ▼                   ▼
+      Outgoing data        Incoming data
+```
+
+This allows the application to remain responsive while waiting for incoming data.
+
+An `std::atomic<bool>` variable is used to coordinate connection state between threads.
+
+---
+
+# 4. Screenshot Capture & Transfer
+
+The final stage adds screenshot functionality.
+
+The client can capture its screen and transfer the screenshot through the TCP connection.
+
+The general process is:
+
+```text
+CLIENT
+  │
+  │ Capture screen
+  ▼
+Screenshot
+  │
+  │ Convert to transferable data
+  ▼
+Binary data
+  │
+  │ TCP
+  ▼
+SERVER
+  │
+  │ Receive binary data
+  ▼
+Reconstruct screenshot
+  │
+  ▼
+Save/display screenshot
+```
+
+The screenshot functionality demonstrates that a TCP socket can transfer **binary data**, not just text messages.
+
+The screenshot implementation is contained in:
+
+```text
+common/screenshot.h
+```
+
+---
+
+# 5. Binary Data Transfer
+
+Text messages are not the only type of information transferred by the project.
+
+The screenshot feature requires binary data transmission.
+
+A screenshot may contain a large amount of data, so the application handles the transfer as a sequence of bytes rather than assuming that the entire image will arrive in one `recv()` call.
+
+This demonstrates an important TCP concept:
+
+> TCP is a byte stream, not a message-based protocol.
+
+For example:
+
+```cpp
+recv(socket, buffer, 4096, 0);
+```
+
+does **not** guarantee that the entire application-level message has been received.
+
+The application protocol therefore determines how much data belongs to a particular transfer and when the complete screenshot has been received.
+
+---
+
+# 6. Custom Communication Protocol
+
+The project contains:
+
+```text
+common/protocol.h
+```
+
+This file contains definitions shared by the client and server.
+
+Both applications use the same protocol definitions so that they agree on how different types of data are exchanged.
+
+The protocol allows the applications to distinguish between different types of operations and data.
+
+---
+
+# 7. Screenshot Utility
+
+The project also contains:
+
+```text
+common/screenshot.h
+```
+
+This header provides the screenshot-related functionality used by the application.
+
+Keeping screenshot functionality separate from the main client/server source code makes the project easier to organize and maintain.
+
+---
+
+# 📂 Final Project Structure
+
+The final project uses the following structure:
 
 ```text
 Socket Programming/
 │
 ├── common/
-│   └── protocol.h
+│   ├── protocol.h
+│   └── screenshot.h
 │
 ├── server/
-│   ├── server_stage6.cpp
-│   └── server6.exe
+│   ├── server.cpp
+│   └── server7.exe
 │
 ├── client/
-│   ├── client_stage6.cpp
-│   └── client6.exe
+│   ├── client.cpp
+│   └── client7.exe
 │
 └── README.md
 ```
 
-### `common/`
+### `common/protocol.h`
 
-Contains files shared by both client and server.
+Contains communication protocol definitions shared by the client and server.
 
-`protocol.h` defines the communication protocol used by both sides.
+### `common/screenshot.h`
 
-### `server/`
+Contains screenshot capture functionality used by the project.
 
-Contains the server implementation.
+### `server/server.cpp`
 
-The server:
+Contains the TCP server implementation.
 
-* Creates the listening socket
-* Binds to the local network interfaces
-* Listens for incoming TCP connections
-* Accepts the client
-* Sends and receives messages
-* Handles screenshot-related communication
-* Uses a receiver thread for full-duplex communication
+### `server/server7.exe`
 
-### `client/`
+Compiled server executable.
 
-Contains the client implementation.
+### `client/client.cpp`
 
-The client:
+Contains the TCP client implementation.
 
-* Creates a TCP socket
-* Connects to the server
-* Sends and receives messages
-* Handles screenshot requests/data
-* Uses a receiver thread for simultaneous communication
+### `client/client7.exe`
+
+Compiled client executable.
 
 ---
 
-# 🛠️ Requirements
+# 🛠️ System Requirements
 
-This project is designed for:
+## Operating System
 
-* Windows 10/11
-* 64-bit x86 systems
+* Windows 10
+* Windows 11
+
+## Architecture
+
+* 64-bit x86 Windows systems
+
+## Compiler
+
+Recommended:
+
 * MinGW-w64
-* GCC/G++ 14 or newer recommended
-* MSYS2 UCRT64 environment
+* UCRT64
+* GCC/G++ 14 or newer
 
-No external IDE is required.
+## Libraries / APIs
 
-You can compile the project entirely from the terminal.
+The project uses:
+
+* Windows Winsock 2
+* Windows screenshot APIs
+* C++ Standard Library
+* C++ threading support
+
+Winsock is linked using:
+
+```text
+-lws2_32
+```
+
+No external networking library is required.
 
 ---
 
-# ⚙️ 1. Install the C++ Compiler From Scratch
+# ⚙️ Installing the Development Environment From Scratch
 
-The recommended compiler environment is:
+## Step 1 — Install MSYS2
 
-**MSYS2 + MinGW-w64 UCRT64**
-
-Official MSYS2 website:
+Download MSYS2 from the official website:
 
 https://www.msys2.org/
 
-Download and install MSYS2 using the default installation location unless you have a reason to change it.
+Install MSYS2 on the Windows computer.
 
 After installation, open:
 
@@ -147,11 +363,11 @@ MSYS2 UCRT64
 
 from the Windows Start Menu.
 
-> Do not use the old MinGW.org GCC 6.x compiler.
+> Use the **UCRT64** environment for this project.
 
 ---
 
-# ⚙️ 2. Update MSYS2
+# Step 2 — Update MSYS2
 
 Inside the **MSYS2 UCRT64** terminal, run:
 
@@ -169,110 +385,93 @@ pacman -Syu
 
 ---
 
-# ⚙️ 3. Install GCC / G++
+# Step 3 — Install MinGW-w64 GCC
 
-Install the MinGW-w64 UCRT64 compiler:
+Install the compiler:
 
 ```bash
 pacman -S mingw-w64-ucrt-x86_64-gcc
 ```
 
-Press:
-
-```text
-Y
-```
-
-when asked for confirmation.
-
-Verify the installation:
-
-```bash
-g++ --version
-```
-
-A modern installation should show a MinGW-w64 UCRT64 compiler.
-
-For example:
-
-```text
-g++.exe ... x86_64-ucrt-posix-seh
-```
+Confirm the installation when prompted.
 
 ---
 
-# ⚙️ 4. Verify the Compiler
+# Step 4 — Verify GCC
 
 Run:
 
 ```bash
-where g++
-```
-
-Make sure Windows is using the newly installed MinGW-w64 compiler.
-
-A modern MSYS2 installation should point to an MSYS2 UCRT64 `bin` directory.
-
-You can also check:
-
-```bash
 g++ --version
 ```
 
-The project requires a compiler capable of supporting:
+A correct installation should identify itself as a MinGW-w64 UCRT64 compiler.
 
-* C++11+
-* `std::thread`
-* modern Winsock headers
-* C++17 features used by the project
+For example:
+
+```text
+x86_64-ucrt-posix-seh
+```
+
+The exact GCC version may be newer than the version used during development.
 
 ---
 
-# 📥 5. Clone the Repository
+# Step 5 — Install Git
 
-Install Git if it is not already installed.
+Git is recommended for cloning the repository.
 
-Official Git website:
+Download Git from:
 
 https://git-scm.com/
 
-Then clone the repository:
+Verify the installation:
+
+```bash
+git --version
+```
+
+---
+
+# 📥 Getting the Project
+
+Clone the repository:
 
 ```bash
 git clone <YOUR-GITHUB-REPOSITORY-URL>
 ```
 
-Enter the project:
+Enter the project directory:
 
 ```bash
 cd "Socket Programming"
 ```
 
-The folder structure should remain unchanged.
-
 ---
 
-# 📁 6. Verify the Folder Structure
+# 📁 Verify the Project Structure
 
-Before compiling, make sure you have:
+Before compiling, make sure the project contains:
 
 ```text
 Socket Programming/
 │
 ├── common/
-│   └── protocol.h
+│   ├── protocol.h
+│   └── screenshot.h
 │
 ├── server/
-│   └── server_stage6.cpp
+│   └── server.cpp
 │
 └── client/
-    └── client_stage6.cpp
+    └── client.cpp
 ```
 
-This structure is important because the source files use a relative path such as:
+This structure is important because the source files use relative paths such as:
 
 ```cpp
 #include "../common/protocol.h"
+#include "../common/screenshot.h"
 ```
 
 The `../` means:
@@ -281,7 +480,7 @@ The `../` means:
 
 ---
 
-# 🖥️ 7. Compile the Server
+# 🖥️ Compiling the Server
 
 Open a terminal inside:
 
@@ -295,37 +494,23 @@ For example:
 cd "C:\Socket Programming\server"
 ```
 
-Verify that the source file exists:
-
-```powershell
-dir
-```
-
-You should see:
-
-```text
-server_stage6.cpp
-```
-
 Compile:
 
 ```bash
-g++ server_stage6.cpp -o server6.exe -lws2_32 -static -pthread
+g++ server.cpp -o server7.exe -lws2_32 -static -pthread
 ```
 
-If compilation succeeds, no error message is normally displayed.
-
-You should now have:
+If compilation succeeds, the executable will be created:
 
 ```text
-server6.exe
+server7.exe
 ```
 
 ---
 
-# 💻 8. Compile the Client
+# 💻 Compiling the Client
 
-Open another terminal inside:
+Open a terminal inside:
 
 ```text
 Socket Programming/client
@@ -340,52 +525,90 @@ cd "C:\Socket Programming\client"
 Compile:
 
 ```bash
-g++ client_stage6.cpp -o client6.exe -lws2_32 -static -pthread
+g++ client.cpp -o client7.exe -lws2_32 -static -pthread
 ```
 
-You should now have:
+The executable will be:
 
 ```text
-client6.exe
+client7.exe
 ```
 
 ---
 
-# 🌐 9. Connect the Two Laptops
+# 🌐 Network Setup
 
-Both computers must be able to communicate over the same local network.
+Both laptops must be able to communicate over a local network.
 
-You can use:
-
-### Wi-Fi
+## Option 1 — Wi-Fi
 
 ```text
-Laptop A ───── Wi-Fi ───── Router
-                           │
-Laptop B ───── Wi-Fi ─────┘
+Laptop A
+   │
+   │ Wi-Fi
+   ▼
+Router
+   ▲
+   │ Wi-Fi
+   │
+Laptop B
 ```
 
-### Ethernet + Router/Switch
-
-```text
-Laptop A ─── Ethernet ─── Switch/Router
-                              │
-Laptop B ─── Ethernet ────────┘
-```
-
-### Direct Ethernet
-
-```text
-Laptop A ───────── Ethernet ───────── Laptop B
-```
-
-For a direct connection, static IP addresses may need to be configured manually.
+Both laptops should be connected to the same LAN.
 
 ---
 
-# 🔍 10. Find the Server IP Address
+## Option 2 — Ethernet + Router/Switch
 
-On the laptop running the server, open Command Prompt or PowerShell:
+```text
+Laptop A
+   │
+   │ Ethernet
+   ▼
+Router / Switch
+   ▲
+   │ Ethernet
+   │
+Laptop B
+```
+
+---
+
+## Option 3 — Direct Ethernet
+
+```text
+Laptop A
+   │
+   │ Ethernet cable
+   │
+Laptop B
+```
+
+For a direct Ethernet connection, static IPv4 addresses may be required because there may be no DHCP server.
+
+Example:
+
+### Server
+
+```text
+IP Address:   192.168.0.111
+Subnet Mask:  255.255.255.0
+Gateway:      leave blank
+```
+
+### Client
+
+```text
+IP Address:   192.168.0.110
+Subnet Mask:  255.255.255.0
+Gateway:      leave blank
+```
+
+---
+
+# 🔍 Finding the Server IP
+
+On the server laptop:
 
 ```cmd
 ipconfig
@@ -399,18 +622,16 @@ Example:
 IPv4 Address : 192.168.0.111
 ```
 
-The server's IP address will vary depending on the network.
-
-**Do not assume the example IP is your actual IP.**
+The actual address will depend on the network.
 
 ---
 
-# 🔧 11. Configure the Client IP
+# 🔧 Configure the Client
 
 Open:
 
 ```text
-client/client_stage6.cpp
+client/client.cpp
 ```
 
 Find the server IP configuration.
@@ -421,7 +642,7 @@ For example:
 #define SERVER_IP "192.168.0.111"
 ```
 
-Replace the address with the **current IPv4 address of the server laptop**.
+Replace it with the **current IPv4 address of the server laptop**.
 
 Example:
 
@@ -435,21 +656,21 @@ The port must match the server:
 #define PORT 5000
 ```
 
-After changing the client source code, recompile it:
+After changing the IP, recompile the client:
 
 ```bash
-g++ client_stage6.cpp -o client6.exe -lws2_32 -static -pthread
+g++ client.cpp -o client7.exe -lws2_32 -static -pthread
 ```
 
 ---
 
-# 🔥 12. Configure Windows Firewall
+# 🔥 Windows Firewall Configuration
 
-The server needs to accept incoming TCP connections on port `5000`.
+The server must accept incoming TCP connections on port `5000`.
 
-Windows Firewall should remain enabled.
+**Do not disable the entire Windows Firewall.**
 
-Instead of disabling the entire firewall, create a specific inbound rule for TCP port 5000.
+Instead, create a specific inbound firewall rule.
 
 Open **PowerShell as Administrator** on the server laptop.
 
@@ -465,21 +686,23 @@ New-NetFirewallRule `
     -Profile Private
 ```
 
-Verify the rule:
+Verify:
 
 ```powershell
 Get-NetFirewallRule -DisplayName "Socket Server TCP 5000"
 ```
 
-The rule should be enabled and allow inbound traffic.
+### File and Printer Sharing
 
-> Only create firewall rules appropriate for a trusted network and remove the custom rule when it is no longer needed.
+**File and Printer Sharing is NOT required.**
+
+The project communicates directly using Winsock/TCP and does not depend on Windows SMB/file-sharing functionality.
 
 ---
 
-# 🧪 13. Test Network Connectivity
+# 🧪 Testing the Network
 
-Before running the client, test basic network connectivity.
+Before starting the client, test basic connectivity.
 
 From the client laptop:
 
@@ -487,19 +710,13 @@ From the client laptop:
 ping SERVER_IP
 ```
 
-For example:
+Example:
 
 ```cmd
 ping 192.168.0.111
 ```
 
-Successful replies indicate that the laptops can communicate at the IP level.
-
----
-
-# 🔌 14. Test TCP Port 5000
-
-From the client laptop, run:
+Then test TCP port `5000`:
 
 ```powershell
 Test-NetConnection SERVER_IP -Port 5000
@@ -511,32 +728,15 @@ Example:
 Test-NetConnection 192.168.0.111 -Port 5000
 ```
 
-Look for:
+Expected:
 
 ```text
 TcpTestSucceeded : True
 ```
 
-If it says:
-
-```text
-TcpTestSucceeded : False
-```
-
-do not immediately change the C++ code.
-
-Check:
-
-1. The server is running.
-2. The server is listening on port 5000.
-3. The server IP is correct.
-4. Both laptops are on the same network.
-5. Windows Firewall allows TCP 5000.
-6. The network is not isolating wireless clients.
-
 ---
 
-# 🖥️ 15. Start the Server
+# 🖥️ Starting the Server
 
 On the server laptop:
 
@@ -547,16 +747,16 @@ cd "C:\Socket Programming\server"
 Run:
 
 ```powershell
-.\server6.exe
+.\server7.exe
 ```
 
-The server should begin listening for a client.
+The server will begin listening for incoming connections.
 
-Keep this terminal open.
+Keep the terminal open.
 
 ---
 
-# 💻 16. Start the Client
+# 💻 Starting the Client
 
 On the client laptop:
 
@@ -567,117 +767,321 @@ cd "C:\Socket Programming\client"
 Run:
 
 ```powershell
-.\client6.exe
+.\client7.exe
 ```
 
-The client should connect to the server's IP address on port `5000`.
+The client should connect to the configured server IP on port `5000`.
 
 ---
 
-# 🔄 Full-Duplex Communication
+# 🔄 Demonstrating Full-Duplex Communication
 
-The project uses a separate receiver thread so sending and receiving can happen concurrently.
+Once connected:
+
+### Client → Server
+
+Type a message on the client.
+
+The server should receive it.
+
+### Server → Client
+
+Type a message on the server.
+
+The client should receive it.
+
+### Simultaneous Communication
+
+Both sides can send messages without waiting for the other side to finish receiving.
+
+This demonstrates **full-duplex TCP communication**.
+
+---
+
+# 📸 Demonstrating Screenshot Transfer
+
+The final implementation supports screenshot transfer from the client.
+
+The demonstration flow is:
+
+```text
+1. Start server
+        ↓
+2. Start client
+        ↓
+3. Establish TCP connection
+        ↓
+4. Perform full-duplex messaging
+        ↓
+5. Trigger screenshot functionality
+        ↓
+6. Client captures screenshot
+        ↓
+7. Screenshot is converted into transferable data
+        ↓
+8. Screenshot data is transferred over TCP
+        ↓
+9. Server receives the binary data
+        ↓
+10. Screenshot is reconstructed/saved
+```
+
+The screenshot feature demonstrates the transfer of binary information through a TCP connection.
+
+---
+
+# 🧠 Important TCP Concept — Byte Streams
+
+TCP is a **byte-stream protocol**.
+
+For example:
+
+```cpp
+send(socket, data, size, 0);
+```
+
+does not guarantee that the receiver will obtain all `size` bytes in a single:
+
+```cpp
+recv()
+```
+
+call.
+
+For large transfers such as screenshots, the application must correctly handle multiple send/receive operations and determine when the complete application-level data has been received.
+
+This is one of the important networking concepts demonstrated by the project.
+
+---
+
+# 🧵 Threading Architecture
+
+The client and server use separate receiving threads.
 
 Conceptually:
 
 ```text
-                 TCP CONNECTION
-              ┌──────────────────┐
-              │                  │
-              │                  │
-        SEND ─┤                  ├─ RECEIVE
-              │                  │
-      RECEIVE ├                  ├─ SEND
-              │                  │
-              └──────────────────┘
+                     TCP SOCKET
+                         │
+               ┌─────────┴─────────┐
+               │                   │
+               ▼                   ▼
+         Main Thread         Receiver Thread
+               │                   │
+             send()              recv()
+               │                   │
+               ▼                   ▼
+         Outgoing data        Incoming data
 ```
 
-The main thread handles sending while a separate thread waits for incoming data.
+This allows sending and receiving to happen concurrently.
 
-This allows both computers to communicate without requiring a strict:
-
-```text
-send → receive → send → receive
-```
-
-sequence.
-
-Instead, both sides can communicate independently.
+An atomic connection-state variable is used to safely coordinate shutdown between threads.
 
 ---
 
-# 📸 Screenshot Transfer
+# 🔌 Important Socket Functions
 
-The final stage also demonstrates transferring screenshot data between the client and server.
-
-The general process is:
+## Server
 
 ```text
-Client
-   │
-   │ Capture screen
-   ▼
-Screenshot data
-   │
-   │ Convert to bytes
-   ▼
-TCP socket
-   │
-   │ Transfer
-   ▼
-Server
-   │
-   │ Receive data
-   ▼
-Reconstruct screenshot
-   │
-   ▼
-Save/display screenshot
+WSAStartup()
+     ↓
+socket()
+     ↓
+bind()
+     ↓
+listen()
+     ↓
+accept()
+     ↓
+send()/recv()
+     ↓
+shutdown()
+     ↓
+closesocket()
+     ↓
+WSACleanup()
 ```
 
-Because screenshots are binary data, the implementation must correctly handle data larger than a single TCP `send()` or `recv()` call.
+## Client
 
-TCP provides a byte stream rather than individual message boundaries, so the application protocol is responsible for determining how much data belongs to a screenshot.
+```text
+WSAStartup()
+     ↓
+socket()
+     ↓
+connect()
+     ↓
+send()/recv()
+     ↓
+shutdown()
+     ↓
+closesocket()
+     ↓
+WSACleanup()
+```
 
 ---
 
-# 🧠 Important TCP Concept
+# 🐛 Troubleshooting
 
-A common beginner mistake is assuming:
+## Error `10060`
+
+If the client reports:
+
+```text
+connect() failed: 10060
+```
+
+check:
+
+1. Is `server7.exe` running?
+2. Is the server IP correct?
+3. Are both laptops on the same LAN?
+4. Is TCP port `5000` allowed through Windows Firewall?
+5. Does `Test-NetConnection` return `True`?
+6. Is the server actually listening on port `5000`?
+
+On the server:
+
+```cmd
+netstat -ano | findstr :5000
+```
+
+A working server should show something similar to:
+
+```text
+TCP    0.0.0.0:5000    0.0.0.0:0    LISTENING
+```
+
+### Important
+
+If the server shows:
+
+```text
+127.0.0.1:5000
+```
+
+then it is listening only on the local computer.
+
+For LAN communication, the server should bind using:
 
 ```cpp
-recv(socket, buffer, 4096, 0);
+serverAddr.sin_addr.s_addr = INADDR_ANY;
 ```
-
-means:
-
-> "Receive the entire message."
-
-It does not.
-
-`recv()` returns the number of bytes currently received, which may be less than the total amount of data being transferred.
-
-Therefore, large data such as screenshots must be transferred using an appropriate protocol and repeated send/receive operations.
-
-This project demonstrates that concept through the screenshot-transfer stage.
 
 ---
 
-# 🛑 Stopping the Program
+# `TcpTestSucceeded : False`
 
-Normally, use the application's built-in shutdown/quit mechanism.
+If:
 
-If the program becomes stuck during development, you can terminate it with:
+```text
+TcpTestSucceeded : False
+```
+
+check:
+
+```text
+Server running?
+      ↓
+Correct server IP?
+      ↓
+Same LAN?
+      ↓
+Server listening on port 5000?
+      ↓
+Firewall rule configured?
+      ↓
+Network isolation?
+```
+
+Do not immediately modify the C++ networking code.
+
+First establish that the TCP connection itself works.
+
+---
+
+# `g++ is not recognized`
+
+Verify:
+
+```bash
+g++ --version
+```
+
+If GCC is unavailable, install:
+
+```bash
+pacman -S mingw-w64-ucrt-x86_64-gcc
+```
+
+Also make sure the **MSYS2 UCRT64** terminal is being used.
+
+---
+
+# `protocol.h` or `screenshot.h` Not Found
+
+Verify:
+
+```text
+Socket Programming/
+│
+├── common/
+│   ├── protocol.h
+│   └── screenshot.h
+│
+├── server/
+│   └── server.cpp
+│
+└── client/
+    └── client.cpp
+```
+
+Compile from inside the appropriate `server` or `client` directory.
+
+---
+
+# Winsock Linker Errors
+
+Make sure the compile command includes:
+
+```text
+-lws2_32
+```
+
+Server:
+
+```bash
+g++ server.cpp -o server7.exe -lws2_32 -static -pthread
+```
+
+Client:
+
+```bash
+g++ client.cpp -o client7.exe -lws2_32 -static -pthread
+```
+
+---
+
+# 🛑 Stopping the Application
+
+Use the application's normal quit/shutdown mechanism.
+
+If necessary, press:
 
 ```text
 Ctrl + C
 ```
 
+in the terminal running the application.
+
 ---
 
-# 🧹 Remove the Firewall Rule
+# 🧹 Removing the Firewall Rule
 
-After the project/demo is finished, the custom firewall rule can be removed.
+After completing the demonstration, the custom firewall rule can be removed.
 
 Open PowerShell as Administrator:
 
@@ -689,168 +1093,46 @@ Windows Firewall itself should remain enabled.
 
 ---
 
-# 🐛 Troubleshooting
+# 🔐 Security & Privacy
 
-## `g++ is not recognized`
+This project is intended for **educational and controlled LAN demonstrations**.
 
-Check:
+The application should only be used with the knowledge and authorization of the people involved.
 
-```bash
-g++ --version
-```
+Important considerations:
 
-If it isn't found, make sure you are using the **MSYS2 UCRT64** terminal and that MinGW-w64 GCC is installed.
-
-Install it with:
-
-```bash
-pacman -S mingw-w64-ucrt-x86_64-gcc
-```
-
----
-
-## `protocol.h: No such file or directory`
-
-Check the project structure:
-
-```text
-Socket Programming/
-├── common/
-│   └── protocol.h
-├── server/
-│   └── server_stage6.cpp
-└── client/
-    └── client_stage6.cpp
-```
-
-Compile from inside the appropriate directory.
-
-For example:
-
-```text
-Socket Programming/server
-```
-
-and not from an unrelated directory.
-
----
-
-## `undefined reference` / Winsock linker errors
-
-Make sure the Winsock library is linked:
-
-```bash
--lws2_32
-```
-
-Example:
-
-```bash
-g++ server_stage6.cpp -o server6.exe -lws2_32 -static -pthread
-```
-
----
-
-## `10060` connection timeout
-
-Error `10060` generally means the client could not establish the TCP connection within the timeout period.
-
-Check:
-
-```text
-1. Is the server running?
-2. Is the server IP correct?
-3. Is the server listening on port 5000?
-4. Are both laptops on the same network?
-5. Is Windows Firewall allowing TCP 5000?
-6. Does Test-NetConnection report True?
-```
-
-On the server:
-
-```cmd
-netstat -ano | findstr :5000
-```
-
-You should see something similar to:
-
-```text
-TCP    0.0.0.0:5000    0.0.0.0:0    LISTENING
-```
-
-If you see:
-
-```text
-127.0.0.1:5000
-```
-
-the server is listening only on localhost and other computers cannot connect.
-
-The server should bind using:
-
-```cpp
-serverAddr.sin_addr.s_addr = INADDR_ANY;
-```
-
----
-
-## `Test-NetConnection` returns `False`
-
-Run on the server:
-
-```cmd
-netstat -ano | findstr :5000
-```
-
-Then verify the firewall rule.
-
-Also check that the client is connecting to the correct server IP:
-
-```cmd
-ipconfig
-```
-
-on the server.
-
----
-
-# 🔐 Security Notes
-
-This project is intended for **controlled educational/lab environments**.
-
-The TCP connection itself is not automatically encrypted simply because it uses TCP.
-
-Therefore:
-
-* Use the project on networks you trust.
-* Do not expose the socket port to the public Internet.
-* Do not configure router port forwarding for this educational project.
+* TCP does not automatically encrypt application data.
+* Do not expose port `5000` directly to the public Internet.
+* Do not configure router port forwarding for this project.
 * Keep Windows Firewall enabled.
-* Use explicit consent when demonstrating screenshot capture.
-* Avoid using the application to capture private information without permission.
-* Remove unnecessary firewall rules after testing.
+* Use a trusted LAN for demonstrations.
+* Screenshot functionality should only be used with appropriate consent.
+* Screenshots may contain passwords, private messages, documents, or other sensitive information.
+* Remove temporary firewall rules after testing.
 
 ---
 
 # 📚 Concepts Demonstrated
 
-This project covers several important Computer Networks concepts:
+This project combines several Computer Networks concepts.
 
-### Network Layer
+## Networking
 
 * IPv4 addressing
-* Subnetting
-* Local Area Networks
-* IP connectivity
+* LAN communication
+* Subnet masks
+* Ports
+* TCP/IP
+* Client-server architecture
 
-### Transport Layer
+## Transport Layer
 
 * TCP
-* Ports
 * Connection-oriented communication
 * Reliable byte-stream transmission
+* TCP ports
 
-### Socket Programming
+## Socket Programming
 
 * `socket()`
 * `bind()`
@@ -862,101 +1144,28 @@ This project covers several important Computer Networks concepts:
 * `shutdown()`
 * `closesocket()`
 
-### Windows Networking
+## Windows Networking
 
 * Winsock 2
 * `WSAStartup()`
 * `WSACleanup()`
 * Windows Firewall
 
-### Concurrency
+## C++
 
-* C++ `std::thread`
-* Concurrent send/receive operations
+* `std::thread`
 * `std::atomic`
+* Standard library
+* Binary data handling
+* File operations
 
-### Data Transfer
+## Application Protocol
 
-* Text messages
-* Binary data
-* TCP stream handling
+* Message types
+* Data framing
+* Binary transfer
 * Screenshot transfer
-* Application-level protocol design
-
----
-
-# 🚀 Quick Demo
-
-Once everything has been installed:
-
-### Server laptop
-
-```powershell
-cd server
-.\server6.exe
-```
-
-### Client laptop
-
-Make sure `SERVER_IP` contains the server's current IP, then:
-
-```powershell
-cd client
-.\client6.exe
-```
-
-Test the TCP connection if needed:
-
-```powershell
-Test-NetConnection SERVER_IP -Port 5000
-```
-
-Expected:
-
-```text
-TcpTestSucceeded : True
-```
-
-Then demonstrate:
-
-1. Client → Server messaging
-2. Server → Client messaging
-3. Simultaneous/full-duplex communication
-4. Screenshot transfer
-
----
-
-# 📝 Notes for Demonstration on Another Laptop
-
-The server's IP address is **not permanent**.
-
-For every new network:
-
-```cmd
-ipconfig
-```
-
-on the server laptop and update the client configuration accordingly.
-
-Example:
-
-```text
-Network 1:
-Server = 192.168.0.111
-
-Network 2:
-Server = 192.168.1.25
-```
-
-The client must connect to the server's current IP.
-
-The port remains:
-
-```text
-5000
-```
-
-unless changed in the source code.
+* Client-server protocol design
 
 ---
 
@@ -966,7 +1175,7 @@ unless changed in the source code.
 
 BS Computer Science
 
-Computer Networks — Socket Programming Project
+**Computer Networks — TCP Socket Programming Project**
 
 ---
 
